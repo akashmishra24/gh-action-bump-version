@@ -51,7 +51,7 @@ const path = require('path');
     exitSuccess('No action necessary because we found a previous bump!');
     return;
   }
-
+})();
   // ... (Code for determining the version bump based on commit messages)
 
   // ... (Code for the git logic)
@@ -64,7 +64,5 @@ const path = require('path');
   // }
 
   // ... (Code for pushing the new tag and committing changes if necessary)
-
-})();
 
 // ... (Code for the getPackageJson function and other helper functions)
