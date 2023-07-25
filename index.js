@@ -1,4 +1,3 @@
-// test
 const { execSync, spawn } = require('child_process');
 const { existsSync } = require('fs');
 const { EOL } = require('os');
@@ -20,10 +19,6 @@ const pkg = getPackageJson();
 (async () => {
   const event = process.env.GITHUB_EVENT_PATH ? require(process.env.GITHUB_EVENT_PATH) : {};
 
-  if (!event.commits && !process.env['INPUT_VERSION-TYPE']) {
-    console.log("Couldn't find any commits in this event, incrementing patch version...");
-  }
-
   const allowedTypes = ['major', 'minor', 'patch', 'prerelease'];
   if (process.env['INPUT_VERSION-TYPE'] && !allowedTypes.includes(process.env['INPUT_VERSION-TYPE'])) {
     exitFailure('Invalid version type');
@@ -38,17 +33,14 @@ const pkg = getPackageJson();
 
   const checkLastCommitOnly = process.env['INPUT_CHECK-LAST-COMMIT-ONLY'] || 'false';
 
-  let messages = []
+  let messages = [];
   if (checkLastCommitOnly === 'true') {
     console.log('Only checking the last commit...');
-    const commit = event.commits && event.commits.lengths > 0 ? event.commits[event.commits.length - 1] : null;
+    const commit = event.head_commit;
     messages = commit ? [commit.message + '\n' + commit.body] : [];
   } else {
     messages = event.commits ? event.commits.map((commit) => commit.message + '\n' + commit.body) : [];
   }
-
-  const commitMessage = process.env['INPUT_COMMIT-MESSAGE'] || 'ci: version bump to {{version}}';
-  console.log('commit messages:', messages);
 
   const bumpPolicy = process.env['INPUT_BUMP-POLICY'] || 'all';
   const commitMessageRegex = new RegExp(commitMessage.replace(/{{version}}/g, `${tagPrefix}\\d+\\.\\d+\\.\\d+${tagSuffix}`), 'ig');
@@ -70,96 +62,96 @@ const pkg = getPackageJson();
     return;
   }
 
-  // input wordings for MAJOR, MINOR, PATCH, PRE-RELEASE
-  const majorWords = process.env['INPUT_MAJOR-WORDING'].split(',').filter((word) => word != '');
-  const minorWords = process.env['INPUT_MINOR-WORDING'].split(',').filter((word) => word != '');
-  // patch is by default empty, and '' would always be true in the includes(''), thats why we handle it separately
-  const patchWords = process.env['INPUT_PATCH-WORDING'] ? process.env['INPUT_PATCH-WORDING'].split(',') : null;
-  const preReleaseWords = process.env['INPUT_RC-WORDING'] ? process.env['INPUT_RC-WORDING'].split(',') : null;
+// input wordings for MAJOR, MINOR, PATCH, PRE-RELEASE
+const majorWords = process.env['INPUT_MAJOR-WORDING'].split(',').filter((word) => word != '');
+const minorWords = process.env['INPUT_MINOR-WORDING'].split(',').filter((word) => word != '');
+// patch is by default empty, and '' would always be true in the includes(''), thats why we handle it separately
+const patchWords = process.env['INPUT_PATCH-WORDING'] ? process.env['INPUT_PATCH-WORDING'].split(',') : null;
+const preReleaseWords = process.env['INPUT_RC-WORDING'] ? process.env['INPUT_RC-WORDING'].split(',') : null;
 
-  console.log('config words:', { majorWords, minorWords, patchWords, preReleaseWords });
+console.log('config words:', { majorWords, minorWords, patchWords, preReleaseWords });
 
-  // get default version bump
-  let version = process.env.INPUT_DEFAULT;
-  let foundWord = null;
-  // get the pre-release prefix specified in action
-  let preid = process.env.INPUT_PREID;
+// get default version bump
+let version = process.env.INPUT_DEFAULT;
+let foundWord = null;
+// get the pre-release prefix specified in action
+let preid = process.env.INPUT_PREID;
 
-  // case if version-type found
-  if (versionType) {
-    version = versionType;
+// case if version-type found
+if (versionType) {
+  version = versionType;
+}
+// case: if wording for MAJOR found
+else if (
+  messages.some(
+    (message) => /^([a-zA-Z]+)(\(.+\))?(\!)\:/.test(message) || majorWords.some((word) => message.includes(word)),
+  )
+) {
+  version = 'major';
+}
+// case: if wording for MINOR found
+else if (messages.some((message) => minorWords.some((word) => message.includes(word)))) {
+  version = 'minor';
+}
+// case: if wording for PATCH found
+else if (patchWords && messages.some((message) => patchWords.some((word) => message.includes(word)))) {
+  version = 'patch';
+}
+// case: if wording for PRE-RELEASE found
+else if (
+  preReleaseWords &&
+  messages.some((message) =>
+    preReleaseWords.some((word) => {
+      if (message.includes(word)) {
+        foundWord = word;
+        return true;
+      } else {
+        return false;
+      }
+    }),
+  )
+) {
+  if (foundWord !== '') {
+    preid = foundWord.split('-')[1];
   }
-  // case: if wording for MAJOR found
-  else if (
-    messages.some(
-      (message) => /^([a-zA-Z]+)(\(.+\))?(\!)\:/.test(message) || majorWords.some((word) => message.includes(word)),
-    )
-  ) {
-    version = 'major';
-  }
-  // case: if wording for MINOR found
-  else if (messages.some((message) => minorWords.some((word) => message.includes(word)))) {
-    version = 'minor';
-  }
-  // case: if wording for PATCH found
-  else if (patchWords && messages.some((message) => patchWords.some((word) => message.includes(word)))) {
-    version = 'patch';
-  }
-  // case: if wording for PRE-RELEASE found
-  else if (
-    preReleaseWords &&
-    messages.some((message) =>
-      preReleaseWords.some((word) => {
-        if (message.includes(word)) {
-          foundWord = word;
-          return true;
-        } else {
-          return false;
-        }
-      }),
-    )
-  ) {
-    if (foundWord !== '') {
-      preid = foundWord.split('-')[1];
-    }
-    version = 'prerelease';
-  }
+  version = 'prerelease';
+}
 
-  console.log('version action after first waterfall:', version);
+console.log('version action after first waterfall:', version);
 
-  // case: if default=prerelease,
-  // rc-wording is also set
-  // and does not include any of rc-wording
-  // and version-type is not strictly set
-  // then unset it and do not run
-  if (
-    version === 'prerelease' &&
-    preReleaseWords &&
-    !messages.some((message) => preReleaseWords.some((word) => message.includes(word))) &&
-    !versionType
-  ) {
-    version = null;
-  }
+// case: if default=prerelease,
+// rc-wording is also set
+// and does not include any of rc-wording
+// and version-type is not strictly set
+// then unset it and do not run
+if (
+  version === 'prerelease' &&
+  preReleaseWords &&
+  !messages.some((message) => preReleaseWords.some((word) => message.includes(word))) &&
+  !versionType
+) {
+  version = null;
+}
 
-  // case: if default=prerelease, but rc-wording is NOT set
-  if (version === 'prerelease' && preid) {
-    version = `${version} --preid=${preid}`;
-  }
+// case: if default=prerelease, but rc-wording is NOT set
+if (version === 'prerelease' && preid) {
+  version = `${version} --preid=${preid}`;
+}
 
-  console.log('version action after final decision:', version);
+console.log('version action after final decision:', version);
 
-  // case: if nothing of the above matches
-  if (!version) {
-    exitSuccess('No version keywords found, skipping bump.');
-    return;
-  }
+// case: if nothing of the above matches
+if (!version) {
+  exitSuccess('No version keywords found, skipping bump.');
+  return;
+}
 
-  // case: if user sets push to false, to skip pushing new tag/package.json
-  const push = process.env['INPUT_PUSH'];
-  if (push === 'false' || push === false) {
-    exitSuccess('User requested to skip pushing new tag and package.json. Finished.');
-    return;
-  }
+// case: if user sets push to false, to skip pushing new tag/package.json
+const push = process.env['INPUT_PUSH'];
+if (push === 'false' || push === false) {
+  exitSuccess('User requested to skip pushing new tag and package.json. Finished.');
+  return;
+}
 
   // GIT logic
   try {
@@ -201,9 +193,9 @@ const pkg = getPackageJson();
     let newVersion = execSync(`npm version --git-tag-version=false ${version}`).toString().trim().replace(/^v/, '');
     console.log('newVersion 1:', newVersion);
     newVersion = `${tagPrefix}${newVersion}${tagSuffix}`;
-    if (process.env['INPUT_SKIP-COMMIT'] !== 'true') {
-      await runInWorkspace('git', ['commit', '-a', '-m', commitMessage.replace(/{{version}}/g, newVersion)]);
-    }
+    // if (process.env['INPUT_SKIP-COMMIT'] !== 'true') {
+    //   await runInWorkspace('git', ['commit', '-a', '-m', commitMessage.replace(/{{version}}/g, newVersion)]);
+    // }
 
     // now go to the actual branch to perform the same versioning
     if (isPullRequest) {
@@ -252,6 +244,7 @@ const pkg = getPackageJson();
         await runInWorkspace('git', ['push', remoteRepo]);
       }
     }
+
   } catch (e) {
     logError(e);
     exitFailure('Failed to bump version');
