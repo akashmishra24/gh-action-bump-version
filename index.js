@@ -64,7 +64,8 @@ const pkg = getPackageJson();
   }
 
   // input wordings for MAJOR, MINOR, PATCH, PRE-RELEASE
-  const majorWords = process.env['INPUT_MAJOR-WORDING'].split(',').filter((word) => word != '');
+ // const majorWords = process.env['INPUT_MAJOR-WORDING'].split(',').filter((word) => word != '');
+  const majorWords = process.env['INPUT_MAJOR-WORDING'].toLowerCase().split(',').filter((word) => word != '');
   const minorWords = process.env['INPUT_MINOR-WORDING'].split(',').filter((word) => word != '');
   // patch is by default empty, and '' would always be true in the includes(''), thats why we handle it separately
   const patchWords = process.env['INPUT_PATCH-WORDING'] ? process.env['INPUT_PATCH-WORDING'].split(',') : null;
