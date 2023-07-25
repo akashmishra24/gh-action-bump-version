@@ -17,7 +17,12 @@ const workspace = process.env.GITHUB_WORKSPACE;
 const pkg = getPackageJson();
 
 (async () => {
+  console.log('Event type:', process.env.GITHUB_EVENT_NAME);
   const event = process.env.GITHUB_EVENT_PATH ? require(process.env.GITHUB_EVENT_PATH) : {};
+
+  console.log('Event:', event);
+  console.log('Commits:', event.commits);
+
 
   const allowedTypes = ['major', 'minor', 'patch', 'prerelease'];
   if (process.env['INPUT_VERSION-TYPE'] && !allowedTypes.includes(process.env['INPUT_VERSION-TYPE'])) {
@@ -45,6 +50,7 @@ const pkg = getPackageJson();
   const commitMessage = process.env['INPUT_COMMIT-MESSAGE'] || 'ci: version bump to {{version}}';
   const bumpPolicy = process.env['INPUT_BUMP-POLICY'] || 'all';
   const commitMessageRegex = new RegExp(commitMessage.replace(/{{version}}/g, `${tagPrefix}\\d+\\.\\d+\\.\\d+${tagSuffix}`), 'ig');
+  console.log('Commit messages:', messages);
 
   let isVersionBump = false;
 
